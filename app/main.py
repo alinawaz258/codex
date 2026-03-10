@@ -42,19 +42,25 @@ def evaluate_claim(
     gps_distance_km: float,
     duplicate_in_24h: bool = False,
 ) -> ClaimDecision:
+    trigger_eligible = trigger.severity >= 0.4
     fraud_score = FraudEngine.fraud_score(trigger, gps_distance_km, duplicate_in_24h)
     allowed = FraudEngine.is_claim_allowed(fraud_score)
+    approved = trigger_eligible and allowed
 
-    payout = payout_for_trigger(profile, trigger) if allowed else 0
-    decision = "approved" if allowed else "manual_review"
+    payout = payout_for_trigger(profile, trigger) if approved else 0
+    decision = "approved" if approved else ("manual_review" if trigger_eligible else "rejected")
     reason = (
         "Parametric trigger hit and fraud score under threshold"
-        if allowed
-        else "High anomaly score; sent for manual review"
+        if approved
+        else (
+            "Trigger severity below eligibility threshold"
+            if not trigger_eligible
+            else "High anomaly score; sent for manual review"
+        )
     )
 
     return ClaimDecision(
-        trigger_eligible=trigger.severity >= 0.4,
+        trigger_eligible=trigger_eligible,
         suggested_payout_inr=payout,
         fraud_score=fraud_score,
         decision=decision,
