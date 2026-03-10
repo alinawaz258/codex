@@ -1,6 +1,7 @@
 import unittest
 
 from app.models import CityTier, DeliverySegment, TriggerEvent, WeeklyQuoteRequest, WorkerProfile
+from app.main import evaluate_claim
 from app.services import FraudEngine, RiskEngine, payout_for_trigger
 
 
@@ -45,6 +46,20 @@ class ServiceTests(unittest.TestCase):
         score = FraudEngine.fraud_score(trigger, gps_distance_km=8, duplicate_in_24h=True)
         self.assertGreaterEqual(score, 0.6)
         self.assertFalse(FraudEngine.is_claim_allowed(score))
+
+
+    def test_low_severity_trigger_is_rejected_without_payout(self):
+        req = self.sample_request()
+        trigger = TriggerEvent(
+            zone_id="BLR-HSR",
+            event_type="light_rain",
+            severity=0.2,
+            expected_hours_lost=3,
+        )
+        decision = evaluate_claim(req.profile, trigger, gps_distance_km=0.5, duplicate_in_24h=False)
+        self.assertFalse(decision.trigger_eligible)
+        self.assertEqual(decision.decision, "rejected")
+        self.assertEqual(decision.suggested_payout_inr, 0)
 
     def test_payout_capped_by_sum_insured(self):
         req = self.sample_request()
